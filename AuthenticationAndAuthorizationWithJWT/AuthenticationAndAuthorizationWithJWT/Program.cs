@@ -13,6 +13,15 @@ namespace AuthenticationAndAuthorizationWithJWT
             // Add services to the container.
 
             // Rachit
+            // Follow this tutorial: https://www.youtube.com/watch?v=kM1fPt1BcLc&ab_channel=CodewithJulian
+
+            /*
+                Nuget Packages added:
+                JWT 6.0.12
+                IdentityModel.Tokens
+                IdentityModel.Tokens.Jwt
+             */
+
             // Add configuration for JWT bearer
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options => {
