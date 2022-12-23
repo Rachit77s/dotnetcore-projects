@@ -57,6 +57,8 @@ namespace AuthenticationAndAuthorizationWithJWT
                 app.UseSwaggerUI();
             }
 
+            // Order is important, otherwise you will receive 401 while authorization
+            app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
 
