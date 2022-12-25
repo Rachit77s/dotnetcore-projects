@@ -127,7 +127,9 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
             List<Claim> claims = new List<Claim>
             {
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, "Admin")
+                new Claim(ClaimTypes.Role, "Admin"),
+                // new Claim(JwtRegisteredClaimNames.Aud, _configuration["Jwt:Audience"]),
+                // new Claim(JwtRegisteredClaimNames.Iss, _configuration["Jwt:Issuer"])
             };
 
             var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(
@@ -135,7 +137,8 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
 
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
 
-            var token = new JwtSecurityToken(
+            var token = new JwtSecurityToken(_configuration["Jwt:Issuer"],
+                _configuration["Jwt:Audience"],
                 claims: claims,
                 expires: DateTime.Now.AddDays(1), // Token will expire in 1 day
                 signingCredentials: creds);

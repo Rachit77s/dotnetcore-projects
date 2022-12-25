@@ -11,8 +11,35 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
     [ApiController]
     public class UserController : ControllerBase
     {
+        public class Members
+        {
+            public int MemberId { get; set; }
+            public string FirstName { get; set; }
+            public string  LastName { get; set; }
+            public string Address { get; set; }
+        }
+        
+
+        
+        [HttpGet("GetAllMember")]
+        [Authorize]
+        public List<Members> GetAllMember()
+        {
+            List<Members> lisMembers = new List<Members>
+            {
+                new Members{MemberId=1, FirstName="Kirtesh", LastName="Shah", Address="Vadodara" },
+                new Members{MemberId=2, FirstName="Nitya", LastName="Shah", Address="Vadodara" },
+                new Members{MemberId=3, FirstName="Dilip", LastName="Shah", Address="Vadodara" },
+                new Members{MemberId=4, FirstName="Atul", LastName="Shah", Address="Vadodara" },
+                new Members{MemberId=5, FirstName="Swati", LastName="Shah", Address="Vadodara" },
+                new Members{MemberId=6, FirstName="Rashmi", LastName="Shah", Address="Vadodara" },
+            };
+            
+            return lisMembers;
+        }
+        
         [HttpGet("Admins")]
-        [Authorize(Roles = "Administrator")]
+        [Authorize(Roles = "Admin")]
         public IActionResult AdminsEndpoint()
         {
             var currentUser = GetCurrentUser();
