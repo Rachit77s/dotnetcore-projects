@@ -42,6 +42,22 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
             // Claims are used to store the data about the user.
+            
+            // What are claims?
+            // Claims are statements about an entity (typically, the user) and additional metadata.
+            // For example, a claim can be used to represent the username of a logged-in user.
+            // Claims can be used to represent any information in a name/value pair.
+            // The name is a claim type, and the value is the claim value.
+            // The claim type is a string that identifies the claim.
+            // The claim value is a string or object that contains the value of the claim.
+ 
+            // In simple words, claims are the information about the user that we want to store in the token.
+            // We can store any information in the claims.
+            // We can store the user id, username, email, role, etc. in the claims.
+            // We can also store the user's permissions in the claims.
+
+            // Claims are the properties describing the user that is authenticated by the token.
+            // For instance, the user's name, email, role, etc. can be stored in the claims.
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Username),
