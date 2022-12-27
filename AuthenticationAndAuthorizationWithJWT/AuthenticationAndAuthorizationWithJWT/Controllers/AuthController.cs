@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AuthenticationAndAuthorizationWithJWT.Dto;
 using AuthenticationAndAuthorizationWithJWT.Models;
@@ -39,28 +41,156 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
         //     var userName = _userService.GetMyName();
         //     return Ok(userName);
         // }
+        [HttpGet("TestEndPoint")]
+        public async Task<ActionResult<User>> TestEndPoint()
+        {
+            
+            User user = new User();
+            // user.Username = request.Username;
+            // user.PasswordHash = passwordHash;
+            // user.PasswordSalt = passwordSalt;
+
+            return Ok(user);
+        }
+        
+        [HttpGet("GetMe"), Authorize]
+        public ActionResult<string> GetMe()
+        {
+            var userName = User.FindFirstValue(ClaimTypes.Name);
+            
+            User user = GetCurrentUser();
+            return Ok(userName);
+        }
+        
+        // Get the info about the user
+        private User GetCurrentUser()
+        {
+            var identity = HttpContext.User.Identity as ClaimsIdentity;
+            
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+   
+            if (identity != null)
+            {
+                // It is IEnumerable i.e. a list
+                var userClaims = identity.Claims;
+
+                return new User
+                {
+                    Username = userClaims.FirstOrDefault(o => o.Type == ClaimTypes.Email)?.Value,
+                    // Role = userClaims.FirstOrDefault(o => o.Type == ClaimTypes.Role)?.Value,
+                    
+                    //Username = userClaims.FirstOrDefault(o => o.Type == ClaimTypes.NameIdentifier)?.Value,
+                    //GivenName = userClaims.FirstOrDefault(o => o.Type == ClaimTypes.GivenName)?.Value,
+                    //Surname = userClaims.FirstOrDefault(o => o.Type == ClaimTypes.Surname)?.Value,
+                };
+            }
+            return null;
+        }
 
         // Create the password salt and password hash while registering the user.
         [HttpPost("register")]
-        public async Task<ActionResult<User>> Register(UserDto request)
+        public async Task<ActionResult<User>> Register(UserSignupDto request)
         {
+            // If user already exists, return bad request
+            // _context.Users.Any(x => x.Email == request.Email)
+            // if (request.Username != null)
+            // {
+            //     return BadRequest("User already exists");
+            // }
+            
+            if(IsValidEmail(request.Email) == false)
+            {
+                return BadRequest("Invalid Email");
+            }
+            
             CreatePasswordHash(request.Password, out byte[] passwordHash, out byte[] passwordSalt);
 
             user.Username = request.Username;
             user.PasswordHash = passwordHash;
             user.PasswordSalt = passwordSalt;
 
-            return Ok(user);
+            // return Ok(user);
+            // Shows 201 StatusCode 
+            return Created("~/api/auth", user); // new {id = user.Id});
         }
+        
+        private void CreatePasswordHash(string password, out byte[] passwordHash, out byte[] passwordSalt)
+        {
+            using (var hmac = new HMACSHA512())
+            {
+                // This Key is the instance of hmac and is used as our salt
+                passwordSalt = hmac.Key;
+                // Get the password hash using the salt obtained by password
+                // Password salt is used to generate the hash
+                passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+            }
+        }
+        
+        public static bool IsValidEmail(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return false;
+
+            try
+            {
+                // Normalize the domain
+                email = Regex.Replace(email, @"(@)(.+)$", DomainMapper,
+                    RegexOptions.None, TimeSpan.FromMilliseconds(200));
+
+                // Examines the domain part of the email and normalizes it.
+                string DomainMapper(Match match)
+                {
+                    // Use IdnMapping class to convert Unicode domain names.
+                    var idn = new IdnMapping();
+
+                    // Pull out and process domain name (throws ArgumentException on invalid)
+                    string domainName = idn.GetAscii(match.Groups[2].Value);
+
+                    return match.Groups[1].Value + domainName;
+                }
+            }
+            catch (RegexMatchTimeoutException e)
+            {
+                return false;
+            }
+            catch (ArgumentException e)
+            {
+                return false;
+            }
+
+            try
+            {
+                return Regex.IsMatch(email,
+                    @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+                    RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return false;
+            }
+        }
+    
 
         // During login, we will again create the password hash and compare it with the password salt stored in the database.
         [HttpPost("login")]
-        public async Task<ActionResult<string>> Login(UserDto request)
+        public async Task<ActionResult<string>> Login(UserLoginDto request)
         {
+            if(IsValidEmail(request.Email) == false)
+            {
+                return BadRequest("Invalid Email");
+            }
+            
             if (user.Username != request.Username)
             {
                 return BadRequest("User not found.");
             }
+            
+            // Find user in database
+            // var user = await _context.Users.SingleOrDefaultAsync(x => x.Email == request.Email);
+            // if (user == null)
+            // {
+            //     return BadRequest("User not found.");
+            // }
 
             // We will compare the password entered by the user while logging in with the password hash and salt
             // of the user that is stored in the database.
@@ -76,18 +206,6 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
             // SetRefreshToken(refreshToken);
 
             return Ok(token);
-        }
-        
-        private void CreatePasswordHash(string password, out byte[] passwordHash, out byte[] passwordSalt)
-        {
-            using (var hmac = new HMACSHA512())
-            {
-                // Key is our salt
-                passwordSalt = hmac.Key;
-                // Get the password hash using the salt obtained by password
-                // Password salt is used to generate the hash
-                passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
-            }
         }
 
         // We will compare the password entered by the user while logging in with the password hash and salt
@@ -128,6 +246,8 @@ namespace AuthenticationAndAuthorizationWithJWT.Controllers
             {
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Role, "Admin"),
+                // Create a claim for the user id
+                // new Claim(ClaimTypes.NameIdentifier, "1"),
                 // new Claim(JwtRegisteredClaimNames.Aud, _configuration["Jwt:Audience"]),
                 // new Claim(JwtRegisteredClaimNames.Iss, _configuration["Jwt:Issuer"])
             };
