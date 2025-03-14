@@ -3,11 +3,18 @@
 # Add steps that build, run tests, deploy, and more:
 # https://aka.ms/yaml
 
-trigger:
-- main
+trigger: none
+#- main
 
 pool:
   vmImage: ubuntu-latest
+
+resources:
+  pipelines:
+    - pipeline: pipeline1 # Short name for pipeline to be used as a variable
+      source: 'Rachit77s.CakeWorld' #Name of pipeline
+      #project:
+      trigger: true
 
 steps:
 - script: echo Hello, world!
@@ -17,3 +24,6 @@ steps:
     echo Add other tasks to build, test, and deploy your project.
     echo See https://aka.ms/yaml
   displayName: 'Run a multi-line script'
+  
+- script: echo Triggered by the source pipeline '$(resources.pipeline1.source)'
+  displayName: 'Run triggered by whom'
