@@ -1,0 +1,351 @@
+@page "/notes"
+@using NotesApp.Models
+@using NotesApp.Services
+@inject INoteService NoteService
+@inject ILogger<Notes> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Notes</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>My Notes</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="row mb-3">
+            <div class="col">
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>Error!</strong> @errorMessage
+                    <button type="button" class="btn-close" @onclick="ClearError" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="row mb-3">
+            <div class="col">
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <strong>Success!</strong> @successMessage
+                    <button type="button" class="btn-close" @onclick="ClearSuccess" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">@(editingNote != null ? "Edit Note" : "Create New Note")</h5>
+                    <EditForm Model="@currentNote" OnValidSubmit="@SaveNote">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Title</label>
+                            <InputText id="title" class="form-control" @bind-Value="currentNote.Title" placeholder="Enter note title" />
+                            <ValidationMessage For="@(() => currentNote.Title)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="content" class="form-label">Content</label>
+                            <InputTextArea id="content" class="form-control" @bind-Value="currentNote.Content" rows="5" placeholder="Enter note content" />
+                            <ValidationMessage For="@(() => currentNote.Content)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="priority" class="form-label">Priority</label>
+                            <InputSelect id="priority" class="form-select" @bind-Value="currentNote.Priority">
+                                <option value="@Priority.Low">Low</option>
+                                <option value="@Priority.Medium">Medium</option>
+                                <option value="@Priority.High">High</option>
+                            </InputSelect>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" disabled="@isProcessing">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                }
+                                @(editingNote != null ? "Update Note" : "Add Note")
+                            </button>
+                            @if (editingNote != null)
+                            {
+                                <button type="button" class="btn btn-secondary" @onclick="CancelEdit" disabled="@isProcessing">Cancel</button>
+                            }
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <h3 class="mb-3">All Notes (@notes.Count)</h3>
+            
+            @if (isLoading)
+            {
+                <div class="text-center my-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading notes...</p>
+                </div>
+            }
+            else if (!notes.Any())
+            {
+                <div class="alert alert-info">
+                    No notes yet. Create your first note above!
+                </div>
+            }
+            else
+            {
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                    @foreach (var note in notes)
+                    {
+                        <div class="col">
+                            <div class="card h-100 shadow-sm note-card @GetPriorityClass(note.Priority)">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h5 class="card-title mb-0">@note.Title</h5>
+                                        <span class="badge @GetPriorityBadgeClass(note.Priority)">
+                                            @note.Priority.ToString()
+                                        </span>
+                                    </div>
+                                    <p class="card-text text-muted small mb-2">
+                                        Created: @note.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")
+                                        @if (note.UpdatedAt.HasValue)
+                                        {
+                                            <br />
+                                            <span>Updated: @note.UpdatedAt.Value.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</span>
+                                        }
+                                    </p>
+                                    <p class="card-text">@note.Content</p>
+                                </div>
+                                <div class="card-footer bg-transparent border-top-0">
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => EditNote(note)" disabled="@isProcessing">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteNote(note.Id)" disabled="@isProcessing">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Note> notes = new();
+    private Note currentNote = new();
+    private Note? editingNote;
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isProcessing = false;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotes();
+    }
+
+    private async Task LoadNotes()
+    {
+        try
+        {
+            isLoading = true;
+            ClearMessages();
+            notes = await NoteService.GetAllNotesAsync();
+            Logger.LogInformation("Successfully loaded {Count} notes", notes.Count);
+        }
+        catch (ApplicationException ex)
+        {
+            errorMessage = ex.Message;
+            Logger.LogError(ex, "Application error while loading notes");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An unexpected error occurred while loading notes. Please refresh the page.";
+            Logger.LogError(ex, "Unexpected error while loading notes");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveNote()
+    {
+        try
+        {
+            isProcessing = true;
+            ClearMessages();
+
+            if (editingNote != null)
+            {
+                // Update existing note
+                currentNote.Id = editingNote.Id;
+                var result = await NoteService.UpdateNoteAsync(currentNote);
+                
+                if (result != null)
+                {
+                    successMessage = "Note updated successfully!";
+                    Logger.LogInformation("Note with ID {NoteId} updated successfully", currentNote.Id);
+                }
+                else
+                {
+                    errorMessage = "Note not found. It may have been deleted.";
+                    Logger.LogWarning("Failed to update note with ID {NoteId} - not found", currentNote.Id);
+                }
+                
+                editingNote = null;
+            }
+            else
+            {
+                // Create new note
+                await NoteService.CreateNoteAsync(currentNote);
+                successMessage = "Note created successfully!";
+                Logger.LogInformation("New note created with title: {Title}", currentNote.Title);
+            }
+
+            currentNote = new Note();
+            await LoadNotes();
+        }
+        catch (ApplicationException ex)
+        {
+            errorMessage = ex.Message;
+            Logger.LogError(ex, "Application error while saving note");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An unexpected error occurred while saving the note. Please try again.";
+            Logger.LogError(ex, "Unexpected error while saving note");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void EditNote(Note note)
+    {
+        try
+        {
+            ClearMessages();
+            editingNote = note;
+            currentNote = new Note
+            {
+                Title = note.Title,
+                Content = note.Content,
+                Priority = note.Priority
+            };
+            Logger.LogInformation("Started editing note with ID: {NoteId}", note.Id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An error occurred while preparing the note for editing.";
+            Logger.LogError(ex, "Error while editing note with ID: {NoteId}", note.Id);
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingNote = null;
+        currentNote = new Note();
+        ClearMessages();
+        Logger.LogInformation("Edit operation cancelled");
+    }
+
+    private async Task DeleteNote(int id)
+    {
+        try
+        {
+            isProcessing = true;
+            ClearMessages();
+
+            var confirmed = true; // In production, you might want to add a confirmation dialog
+            if (confirmed)
+            {
+                var result = await NoteService.DeleteNoteAsync(id);
+                
+                if (result)
+                {
+                    successMessage = "Note deleted successfully!";
+                    Logger.LogInformation("Note with ID {NoteId} deleted successfully", id);
+                    await LoadNotes();
+                }
+                else
+                {
+                    errorMessage = "Note not found. It may have already been deleted.";
+                    Logger.LogWarning("Failed to delete note with ID {NoteId} - not found", id);
+                }
+            }
+        }
+        catch (ApplicationException ex)
+        {
+            errorMessage = ex.Message;
+            Logger.LogError(ex, "Application error while deleting note with ID: {NoteId}", id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An unexpected error occurred while deleting the note. Please try again.";
+            Logger.LogError(ex, "Unexpected error while deleting note with ID: {NoteId}", id);
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void ClearError()
+    {
+        errorMessage = null;
+    }
+
+    private void ClearSuccess()
+    {
+        successMessage = null;
+    }
+
+    private void ClearMessages()
+    {
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private string GetPriorityClass(Priority priority)
+    {
+        return priority switch
+        {
+            Priority.High => "border-danger border-start border-4",
+            Priority.Medium => "border-warning border-start border-4",
+            Priority.Low => "border-info border-start border-4",
+            _ => ""
+        };
+    }
+
+    private string GetPriorityBadgeClass(Priority priority)
+    {
+        return priority switch
+        {
+            Priority.High => "bg-danger",
+            Priority.Medium => "bg-warning text-dark",
+            Priority.Low => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+}
